@@ -1,0 +1,39 @@
+name: Economic Calendar Alerts
+
+on:
+  schedule:
+    # Every 5 minutes. GitHub Actions cron uses UTC.
+    - cron: '*/5 * * * *'
+  workflow_dispatch:  # Allows manual run from the Actions tab
+
+permissions:
+  contents: write    # Required to commit the updated state file back
+
+jobs:
+  alert:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run calendar bot
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: python calendar_bot.py
+
+      - name: Commit state file
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ -n "$(git status --porcelain alerted.json)" ]; then
+            git add alerted.json
+            git commit -m "Update alerted state [skip ci]"
+            git push
+          else
+            echo "No state changes to commit."
+          fi
