@@ -37,6 +37,9 @@ STATE_FILE      = "digest_state.json"
 BOT_USERNAME    = "Fiber Trades · Calendar"
 BOT_AVATAR      = "https://cdn.discordapp.com/embed/avatars/0.png"
 
+# User-Agent required by Discord for webhook POSTs from cloud IPs
+USER_AGENT = "FiberTradesCalendarBot (https://github.com/FiberTrades/fiber-trades-calendar-bot, 1.0)"
+
 FLAGS  = {"USD": "🇺🇸", "GBP": "🇬🇧", "CHF": "🇨🇭", "EUR": "🇪🇺"}
 DAYS   = ["Monday", "Tuesday", "Wednesday", "Thursday",
           "Friday", "Saturday", "Sunday"]
@@ -270,7 +273,10 @@ def post_new_message(content):
     req = urllib.request.Request(
         url,
         data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
+        headers={
+            "Content-Type": "application/json",
+            "User-Agent":   USER_AGENT,
+        },
         method="POST",
     )
     try:
@@ -293,7 +299,10 @@ def edit_message(message_id, content):
     req = urllib.request.Request(
         url,
         data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
+        headers={
+            "Content-Type": "application/json",
+            "User-Agent":   USER_AGENT,
+        },
         method="PATCH",
     )
     try:
