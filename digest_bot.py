@@ -1,23 +1,15 @@
 """
 ═══════════════════════════════════════════════════════════════════════════════
-FIBER TRADES — LIVING WEEKLY CALENDAR DIGEST (one message per day)
+FIBER TRADES — WEEKLY CALENDAR BRIEFING
 ═══════════════════════════════════════════════════════════════════════════════
 
-Sunday 18:00 UTC: posts one Discord message per weekday (Mon–Fri), each
-containing that day's events with holidays at the top. Saves all message IDs.
+Every Sunday 18:00 UTC: posts one Discord message per weekday (Mon–Fri),
+each containing that day's events with forecasts, priors, and holidays.
 
-Every 5 minutes Mon–Fri: rebuilds each day's content with `actual` values
-filled in as events release, and edits each message in place by ID.
-
-State file: digest_state.json
-  {
-    "week_start": "2026-05-18",
-    "messages": {
-      "2026-05-18": "1234567890",
-      "2026-05-19": "1234567891",
-      ...
-    }
-  }
+This is a forward-looking pre-session briefing — it does NOT auto-update
+with actuals after events release. The XML feed (faireconomy.media mirror
+of Forex Factory) does not publish actuals. For real-time results, check
+forexfactory.com or your charting platform directly.
 
 ═══════════════════════════════════════════════════════════════════════════════
 """
@@ -43,7 +35,7 @@ BOT_AVATAR      = "https://cdn.discordapp.com/embed/avatars/0.png"
 # User-Agent required by Discord for webhook POSTs from cloud IPs
 USER_AGENT = "FiberTradesCalendarBot (https://github.com/FiberTrades/fiber-trades-calendar-bot, 1.0)"
 
-# Days to include in the digest. Weekend usually has nothing, so Mon–Fri only.
+# Days to include. Weekend usually has nothing, so Mon–Fri only.
 DIGEST_WEEKDAYS = [0, 1, 2, 3, 4]  # 0=Mon, 4=Fri
 
 FLAGS  = {"USD": "🇺🇸", "GBP": "🇬🇧", "CHF": "🇨🇭", "EUR": "🇪🇺"}
@@ -99,7 +91,6 @@ def parse_calendar(xml_bytes):
         impact   = (ev.findtext("impact") or "").strip()
         forecast = (ev.findtext("forecast") or "").strip()
         previous = (ev.findtext("previous") or "").strip()
-        actual   = (ev.findtext("actual") or "").strip()
 
         if country not in CURRENCY_FILTER:
             continue
@@ -140,17 +131,13 @@ def parse_calendar(xml_bytes):
             "impact":       impact,
             "forecast":     forecast,
             "previous":     previous,
-            "actual":       actual,
         })
 
     return events
 
 
 def utc_to_london(year, month, day, hour, minute):
-    """Convert ForexFactory XML time (which is in UTC) to London local time.
-    During BST (last Sun Mar → last Sun Oct), London = UTC + 1.
-    During GMT (rest of year),                London = UTC.
-    """
+    """Convert ForexFactory XML time (which is in UTC) to London local time."""
     dt_naive = datetime(year, month, day, hour, minute)
     uk_dst = last_sunday(year, 3) <= dt_naive.date() < last_sunday(year, 10)
     delta_hours = 1 if uk_dst else 0
@@ -175,26 +162,24 @@ def build_day_message(date, events_for_day, is_first_day=False):
 
     lines = []
     if is_first_day:
-        lines.append("🗓️ **Week Ahead — Calendar**")
+        lines.append("🗓️ **Week Ahead — Calendar Briefing**")
+        lines.append("_Forecasts and priors only. Check Forex Factory for live actuals._")
         lines.append("")
     lines.append(f"━━━ **{date_str}** ━━━")
 
     if not events_for_day:
         lines.append("_No scheduled events._")
     else:
-        # Split holidays/all-day from timed
         holidays = [e for e in events_for_day
                     if e["impact"] == "Holiday"
                     or e["time_display"] == "All Day"
                     or "holiday" in e["title"].lower()]
         timed    = [e for e in events_for_day if e not in holidays]
 
-        # Holidays first
         for h in holidays:
             flag = FLAGS.get(h["currency"], "")
             lines.append(f"🏖️ {flag} {h['currency']} — {h['title']}")
 
-        # Sort timed by London time
         timed.sort(key=lambda e: e["sort_key"])
 
         for e in timed:
@@ -207,8 +192,6 @@ def build_day_message(date, events_for_day, is_first_day=False):
                 parts.append(f"Prev {e['previous']}")
             if e["forecast"]:
                 parts.append(f"Fcst {e['forecast']}")
-            if e["actual"]:
-                parts.append(f"**Act {e['actual']}** ✅")
             if parts:
                 line += "  ·  " + "  ·  ".join(parts)
 
@@ -216,7 +199,6 @@ def build_day_message(date, events_for_day, is_first_day=False):
 
     msg = "\n".join(lines)
 
-    # Safety truncation — extremely unlikely with one day per message
     if len(msg) > 1990:
         msg = msg[:1980] + "\n…_(truncated)_"
     return msg
@@ -240,7 +222,6 @@ def save_state(state):
 
 
 def post_new_message(content):
-    """POST a new message via the webhook. Returns the message ID."""
     payload = {
         "username":   BOT_USERNAME,
         "avatar_url": BOT_AVATAR,
@@ -269,42 +250,7 @@ def post_new_message(content):
         return None
 
 
-def edit_message(message_id, content):
-    """PATCH an existing webhook message by ID."""
-    url = f"{WEBHOOK_URL}/messages/{message_id}"
-    payload = {"content": content}
-
-    import urllib.request
-    req = urllib.request.Request(
-        url,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Content-Type": "application/json",
-            "User-Agent":   USER_AGENT,
-        },
-        method="PATCH",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            log(f"  ✓ Edited (id={message_id})")
-            return True
-    except HTTPError as e:
-        if e.code == 404:
-            log(f"  ✗ Message {message_id} not found")
-            return False
-        log(f"  ✗ HTTP {e.code} editing: {e}")
-        return False
-    except URLError as e:
-        log(f"  ✗ Failed to edit: {e}")
-        return False
-
-
 # ───────────────────────── MAIN ──────────────────────────────────────────────
-
-def week_start_for(date):
-    """Returns the Monday of the week containing this date (ISO string)."""
-    return (date - timedelta(days=date.weekday())).isoformat()
-
 
 def main():
     if not WEBHOOK_URL:
@@ -315,61 +261,41 @@ def main():
     events   = parse_calendar(xml_data)
     log(f"Parsed {len(events)} eligible events")
 
-    # Compute this week's Monday → Friday
     today = datetime.now(timezone.utc).date()
     monday = today - timedelta(days=today.weekday())
     week_days = [monday + timedelta(days=i) for i in DIGEST_WEEKDAYS]
     current_week = monday.isoformat()
 
-    # Group events by date
     by_date = {}
     for e in events:
         by_date.setdefault(e["date"], []).append(e)
 
-    # Load state
     state = load_state()
     saved_week = state.get("week_start")
-    saved_messages = state.get("messages", {})
 
-    # If a new week, clear out old message IDs and post all five fresh
-    is_new_week = (saved_week != current_week)
-    if is_new_week:
-        log(f"New week ({current_week}) — posting all days fresh")
-        saved_messages = {}
+    # Skip if we've already posted for this week (prevents duplicate posts
+    # if the workflow is manually re-run mid-week)
+    if saved_week == current_week:
+        log(f"Week {current_week} already posted. Skipping.")
+        log("(To force a repost, delete digest_state.json from the repo and re-run.)")
+        return
 
-    new_messages = {}
+    log(f"Posting briefing for week starting {current_week}")
+    posted_ids = []
     for idx, day in enumerate(week_days):
-        day_key = day.isoformat()
         day_events = by_date.get(day, [])
         content = build_day_message(day, day_events, is_first_day=(idx == 0))
-
-        existing_id = saved_messages.get(day_key)
-        if existing_id and not is_new_week:
-            # Edit in place
-            log(f"Editing {day_key} (id={existing_id})")
-            success = edit_message(existing_id, content)
-            if success:
-                new_messages[day_key] = existing_id
-            else:
-                # Edit failed — post fresh
-                log(f"Reposting {day_key}")
-                msg_id = post_new_message(content)
-                if msg_id:
-                    new_messages[day_key] = msg_id
-        else:
-            # Post fresh
-            log(f"Posting {day_key}")
-            msg_id = post_new_message(content)
-            if msg_id:
-                new_messages[day_key] = msg_id
-            # Small delay between posts to avoid Discord rate limits
-            time.sleep(0.5)
+        log(f"Posting {day.isoformat()}")
+        msg_id = post_new_message(content)
+        if msg_id:
+            posted_ids.append(msg_id)
+        time.sleep(0.5)  # avoid Discord rate limits
 
     save_state({
         "week_start": current_week,
-        "messages":   new_messages,
+        "posted":     posted_ids,
     })
-    log(f"State saved: {len(new_messages)} day messages tracked")
+    log(f"State saved: {len(posted_ids)} day messages posted")
 
 
 if __name__ == "__main__":
