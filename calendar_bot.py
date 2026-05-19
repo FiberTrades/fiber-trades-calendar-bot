@@ -5,10 +5,10 @@ FIBER TRADES — ECONOMIC CALENDAR ALERT BOT
 
 Runs every 5 minutes via GitHub Actions. Fetches the week's economic calendar
 from the Faireconomy mirror of Forex Factory, finds events scheduled to release
-in the next 5–10 minutes, filters to HIGH impact + EUR/USD currencies, and
-posts an alert to Discord via webhook.
+in the next 5–10 minutes, filters to HIGH/MEDIUM/LOW impact + USD/GBP/CHF/EUR
+currencies, and posts an alert to Discord via webhook.
 
-How it knows what's been alerted: it writes a small state file `alerted.txt`
+How it knows what's been alerted: it writes a small state file `alerted.json`
 in the repo with event IDs it has already posted, so re-runs don't double-post.
 GitHub Actions commits the updated state file back to the repo automatically.
 
@@ -34,11 +34,12 @@ WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "").strip()
 # Calendar source: faireconomy.media mirror of Forex Factory (public, stable).
 CALENDAR_URL = "https://nfs.faireconomy.media/ff_calendar_thisweek.xml"
 
-# Only post events with these impacts. "High" is recommended for signal-only.
-IMPACT_FILTER = {"High"}
+# Only post events with these impacts.
+IMPACT_FILTER = {"High", "Medium", "Low"}
 
 # Only post events for these currencies.
-CURRENCY_FILTER = {"USD", "EUR", "GBP"}  # GBP included since London session
+# USD = US, GBP = UK, CHF = Switzerland, EUR = Eurozone (incl. France, Germany).
+CURRENCY_FILTER = {"USD", "GBP", "CHF", "EUR"}
 
 # How far ahead to look for events that should trigger an alert.
 ALERT_WINDOW_MIN = 0      # events starting at or after now
@@ -279,7 +280,7 @@ def main():
     events = parse_calendar(xml_data)
     log(f"Parsed {len(events)} events from calendar")
 
-    # Filter to upcoming, high-impact, relevant currencies
+    # Filter to upcoming, in-impact, relevant currencies
     eligible = [
         e for e in events
         if e["impact"] in IMPACT_FILTER
