@@ -2,10 +2,8 @@ name: Calendar Digest
 
 on:
   schedule:
-    # Sunday 18:00 UTC — initial weekly post
+    # Sunday 18:00 UTC — post the week ahead
     - cron: '0 18 * * 0'
-    # Every 5 minutes Mon–Fri — refresh with actuals
-    - cron: '*/5 * * * 1-5'
   workflow_dispatch:
 
 permissions:
