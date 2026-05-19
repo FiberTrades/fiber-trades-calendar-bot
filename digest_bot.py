@@ -122,7 +122,7 @@ def parse_calendar(xml_bytes):
                     hour += 12
                 elif ampm == "am" and hour == 12:
                     hour = 0
-                london_hour, london_minute = eastern_to_london(
+                london_hour, london_minute = utc_to_london(
                     year, month, day, hour, minute
                 )
                 time_display = f"{london_hour:02d}:{london_minute:02d}"
@@ -146,27 +146,16 @@ def parse_calendar(xml_bytes):
     return events
 
 
-def eastern_to_london(year, month, day, hour, minute):
+def utc_to_london(year, month, day, hour, minute):
+    """Convert ForexFactory XML time (which is in UTC) to London local time.
+    During BST (last Sun Mar → last Sun Oct), London = UTC + 1.
+    During GMT (rest of year),                London = UTC.
+    """
     dt_naive = datetime(year, month, day, hour, minute)
-    us_dst = second_sunday(year, 3) <= dt_naive.date() < first_sunday(year, 11)
     uk_dst = last_sunday(year, 3) <= dt_naive.date() < last_sunday(year, 10)
-    et_offset = -4 if us_dst else -5
-    uk_offset =  1 if uk_dst else  0
-    delta_hours = uk_offset - et_offset
+    delta_hours = 1 if uk_dst else 0
     dt_london = dt_naive + timedelta(hours=delta_hours)
     return dt_london.hour, dt_london.minute
-
-
-def second_sunday(year, month):
-    d = datetime(year, month, 1)
-    first_sun_day = (6 - d.weekday()) % 7 + 1
-    return datetime(year, month, first_sun_day + 7).date()
-
-
-def first_sunday(year, month):
-    d = datetime(year, month, 1)
-    first_sun_day = (6 - d.weekday()) % 7 + 1
-    return datetime(year, month, first_sun_day).date()
 
 
 def last_sunday(year, month):
