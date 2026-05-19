@@ -1,16 +1,18 @@
-name: Economic Calendar Alerts
+name: Calendar Digest
 
 on:
   schedule:
-    # Every 5 minutes. GitHub Actions cron uses UTC.
-    - cron: '*/5 * * * *'
-  workflow_dispatch:  # Allows manual run from the Actions tab
+    # Sunday 18:00 UTC — initial weekly post
+    - cron: '0 18 * * 0'
+    # Every 5 minutes Mon–Fri — refresh with actuals
+    - cron: '*/5 * * * 1-5'
+  workflow_dispatch:
 
 permissions:
-  contents: write    # Required to commit the updated state file back
+  contents: write
 
 jobs:
-  alert:
+  digest:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
@@ -21,18 +23,18 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Run calendar bot
+      - name: Run digest
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-        run: python calendar_bot.py
+        run: python digest_bot.py
 
       - name: Commit state file
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if [ -n "$(git status --porcelain alerted.json)" ]; then
-            git add alerted.json
-            git commit -m "Update alerted state [skip ci]"
+          if [ -n "$(git status --porcelain digest_state.json)" ]; then
+            git add digest_state.json
+            git commit -m "Update digest state [skip ci]"
             git push
           else
             echo "No state changes to commit."
