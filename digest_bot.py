@@ -29,6 +29,7 @@ from urllib.request import urlopen, Request
 from urllib.error import URLError, HTTPError
 
 WEBHOOK_URL     = os.environ.get("DISCORD_WEBHOOK_URL", "").strip()
+print(f"DEBUG: URL length={len(WEBHOOK_URL)}, starts_with={WEBHOOK_URL[:35]!r}, ends_with={WEBHOOK_URL[-15:]!r}")
 CALENDAR_URL    = "https://nfs.faireconomy.media/ff_calendar_thisweek.xml"
 CURRENCY_FILTER = {"USD", "GBP", "CHF", "EUR"}
 IMPACT_FILTER   = {"High", "Medium", "Low", "Holiday", "Non-Economic", ""}
