@@ -6,6 +6,9 @@ FIBER TRADES — WEEKLY CALENDAR BRIEFING
 Every Sunday 18:00 UTC: posts one Discord message per weekday (Mon–Fri),
 each containing that day's events with forecasts, priors, and holidays.
 
+Before posting the new week, deletes the previous week's messages from
+Discord so the channel only ever shows the current week.
+
 This is a forward-looking pre-session briefing — it does NOT auto-update
 with actuals after events release. The XML feed (faireconomy.media mirror
 of Forex Factory) does not publish actuals. For real-time results, check
@@ -250,6 +253,40 @@ def post_new_message(content):
         return None
 
 
+def delete_old_message(msg_id):
+    """
+    Delete a message previously posted by this webhook.
+    Uses DELETE /webhooks/{id}/{token}/messages/{message_id}.
+    Returns True on success (or if message was already deleted), False otherwise.
+    """
+    import urllib.request
+    # The webhook URL is of the form .../webhooks/{id}/{token}[?query...].
+    # Strip any existing query string before appending /messages/{msg_id}.
+    base = WEBHOOK_URL.split("?", 1)[0].rstrip("/")
+    url  = f"{base}/messages/{msg_id}"
+    req  = urllib.request.Request(
+        url,
+        headers={"User-Agent": USER_AGENT},
+        method="DELETE",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            # Discord returns 204 No Content on success.
+            log(f"  ✓ Deleted old message (id={msg_id})")
+            return True
+    except HTTPError as e:
+        # 404 = message already gone (someone manually deleted it, or it expired).
+        # That's not really a failure for our purposes — the goal is just for it to be gone.
+        if e.code == 404:
+            log(f"  · Old message {msg_id} not found (already deleted)")
+            return True
+        log(f"  ✗ Failed to delete {msg_id}: HTTP {e.code}")
+        return False
+    except URLError as e:
+        log(f"  ✗ Failed to delete {msg_id}: {e}")
+        return False
+
+
 # ───────────────────────── MAIN ──────────────────────────────────────────────
 
 def main():
@@ -286,6 +323,17 @@ def main():
         log(f"Week {current_week} already posted. Skipping.")
         log("(To force a repost, delete digest_state.json from the repo and re-run.)")
         return
+
+    # Delete the previous week's messages BEFORE posting the new week,
+    # so the channel only ever shows the current week's briefing.
+    old_ids = state.get("posted", [])
+    if old_ids:
+        log(f"Deleting {len(old_ids)} message(s) from previous week ({saved_week})")
+        for old_id in old_ids:
+            delete_old_message(old_id)
+            time.sleep(0.3)  # gentle on the rate limit
+    else:
+        log("No previous-week messages to delete.")
 
     log(f"Posting briefing for week starting {current_week}")
     posted_ids = []
