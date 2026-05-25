@@ -261,7 +261,14 @@ def main():
     events   = parse_calendar(xml_data)
     log(f"Parsed {len(events)} eligible events")
 
+    # Anchor the digest to the UPCOMING Monday.
+    # The job is scheduled for Sunday 18:00 UTC, but if it ever runs on a Sunday
+    # we want it to post for the week that's about to start (the next day),
+    # NOT the week that just ended. Without this roll-forward, today.weekday()==6
+    # makes `monday = today - 6 days`, which is the Monday already gone.
     today = datetime.now(timezone.utc).date()
+    if today.weekday() == 6:  # Sunday → roll into Monday's week
+        today = today + timedelta(days=1)
     monday = today - timedelta(days=today.weekday())
     week_days = [monday + timedelta(days=i) for i in DIGEST_WEEKDAYS]
     current_week = monday.isoformat()
